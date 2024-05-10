@@ -41,15 +41,11 @@ func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
 	return data, nil
 }
 
-func EncryptFile(filePath string, saveDir string, numCpu int, numChunks int) (string, error) {
+func EncryptFile(filePath string, saveDir string, numCpu int) (string, error) {
 
 	//check parameters
 	if numCpu > runtime.NumCPU() || numCpu < 0 {
 		return "", fmt.Errorf("the number of cpus must be between 1 and  %d", runtime.NumCPU())
-	}
-
-	if numChunks <= 0 {
-		return "", fmt.Errorf("chunk size must be between 0 and 2^64")
 	}
 
 	//setting max cpu usage
@@ -88,14 +84,6 @@ func EncryptFile(filePath string, saveDir string, numCpu int, numChunks int) (st
 	}
 	defer encFile.Close()
 
-	//save numChunks at the beginning of the file
-	numChunks_buff := make([]byte, numChunksBufferMax)
-	binary.LittleEndian.PutUint64(numChunks_buff, uint64(numChunks))
-	_, err = encFile.WriteAt(numChunks_buff, 0)
-	if err != nil {
-		panic(err)
-	}
-
 	//saving the filename encrypted after numChunks
 	filenameBuffer := make([]byte, maxFilename_length)
 	copy(filenameBuffer, []byte(filename))
@@ -116,12 +104,20 @@ func EncryptFile(filePath string, saveDir string, numCpu int, numChunks int) (st
 		return "", err
 	}
 
-	chunkSize := int(int(fileInfo.Size()) / numChunks) //I want chunksize to be integer to not have problems with buffer
+	numChunks := int(int(fileInfo.Size()) / chunkSize) //I want chunksize to be integer to not have problems with buffer
 	lastChunksize := (int(fileInfo.Size()) % numChunks) + chunkSize
 	enc_chunkSize := chunkSize + nonceSize + gcmTagSize
-	initialWriteOffset := len(numChunks_buff) + len(enc_filenameBuffer)
+	initialWriteOffset := numChunksBufferMax + len(enc_filenameBuffer)
 	// fmt.Println("File size: ", fileInfo.Size())
 	// fmt.Printf("Calculated chunks: chunkSize %d, lastChunksize %d, enc_chunkSize %d\n", chunkSize, lastChunksize, enc_chunkSize)
+
+	//save numChunks at the beginning of the file
+	numChunks_buff := make([]byte, numChunksBufferMax)
+	binary.LittleEndian.PutUint64(numChunks_buff, uint64(numChunks))
+	_, err = encFile.WriteAt(numChunks_buff, 0)
+	if err != nil {
+		panic(err)
+	}
 
 	//making the parallelism
 	var wg sync.WaitGroup

@@ -4,46 +4,62 @@ import (
 	"fmt"
 	"go-warshield/encryptor"
 	"os"
-	"strconv"
+	"sync"
 	"time"
 )
 
 func main() {
-	numCpu, err := strconv.Atoi(os.Args[1])
-	if err != nil {
-		panic(err)
+
+	var password string
+	var filePath string
+	var option string
+
+	if len(os.Args) < 2 {
+		//todo
+	} else {
+		option = os.Args[1]
+		filePath = os.Args[2]
 	}
-	numChunks, err := strconv.Atoi(os.Args[2])
+
+	fmt.Print("Insert password: ")
+	_, err := fmt.Scanf("%s", &password)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("Start encryption with %d CPUs and %d numChunks\n", numCpu, numChunks)
+	progress := make(chan float64)
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		for p := range progress {
+
+			fmt.Print("\r") // Torna a capo sulla stessa riga
+			fmt.Printf("Progress: %d %%", int(p*100))
+		}
+		wg.Done()
+	}()
+
 	startTime := time.Now()
 
-	pass, err := encryptor.EncryptFile("/home/willianzeni/Desktop/backup.zip", "/home/willianzeni/Desktop", numCpu, numChunks)
-	if err != nil {
-		panic(err)
+	if option == "enc" {
+		fmt.Printf("Start encryption\n")
+		err := encryptor.EncryptFile(password, filePath, encryptor.MaxCPUs, encryptor.MaxGoRoutines, progress)
+		if err != nil {
+			panic(err)
+		}
+
+	} else {
+		fmt.Println("Start decryption")
+		err = encryptor.DecryptFile(password, filePath, encryptor.MaxCPUs, encryptor.MaxGoRoutines, progress)
+		if err != nil {
+			panic(err)
+		}
 	}
-	fmt.Println(pass)
+
+	wg.Wait()
 
 	elapsedTime := time.Since(startTime)
-	fmt.Println("Elapsed time encrypt:", elapsedTime)
+	fmt.Println("\n\nElapsed time:", elapsedTime)
 
-	// fmt.Println("Start decryption")
-
-	// startTime = time.Now()
-
-	// name := "backup.zip"
-	// shaName := sha256.Sum256([]byte(name))
-	// encFileName := hex.EncodeToString(shaName[:])
-
-	// path := filepath.Join("/home/willianzeni/Desktop", encFileName)
-
-	// err = encryptor.DecryptFile(pass, path, "/home/willianzeni/Downloads", numCpu)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// elapsedTime = time.Since(startTime)
-	// fmt.Println("Elapsed time decrypt:", elapsedTime)
 }

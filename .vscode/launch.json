@@ -5,12 +5,23 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "main.go",
+            "name": "enc.go",
             "type": "go",
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["8", "1"]
+            "args": ["enc", "/home/willianzeni/Desktop/NS345.mp4"], 
+            "console": "integratedTerminal"
+        },
+          
+        {
+            "name": "dec.go",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "main.go",
+            "args": ["dec", "/home/willianzeni/Desktop/NS345.mp4.war"], 
+            "console": "integratedTerminal"
         }
     ]
 }

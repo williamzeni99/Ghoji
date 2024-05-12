@@ -1,11 +1,9 @@
 package encryptor
 
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -32,58 +30,40 @@ func decryptBuffer(key [32]byte, encBuffer []byte) ([]byte, error) {
 
 }
 
-func DecryptFile(pass string, encfilePath string, saveDir string, numCpu int) error {
+func DecryptFile(password string, encfilePath string, numCpu int, goroutines int, progress chan<- float64) error {
 	//check parameters
-	if numCpu > runtime.NumCPU() || numCpu < 0 {
-		return fmt.Errorf("the number of cpus must be between 1 and  %d", runtime.NumCPU())
+	if numCpu > MaxCPUs || numCpu < 0 {
+		return fmt.Errorf("\nthe number of cpus must be between 1 and  %d", runtime.NumCPU())
+	}
+
+	if goroutines <= 0 {
+		return fmt.Errorf("\nthe number of maxgoroutines must be greater than 0")
 	}
 
 	//setting max cpu usage
 	runtime.GOMAXPROCS(numCpu)
 
-	//generating the key
-	key := sha256.Sum256([]byte(pass))
+	//generating the key (nice way to be sure to have 32 bytes password? I'm not sure)
+	key := sha256.Sum256([]byte(password))
 
-	//open encfile
+	//file opening
 	encFile, err := os.Open(encfilePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("\ncannot open %s\n%s", encfilePath, err)
 	}
 	defer encFile.Close()
 
-	//get numChunks from beginning of file
-	chuncksize_buff := make([]byte, numChunksBufferMax)
-	_, err = encFile.ReadAt(chuncksize_buff, 0)
-	if err != nil && err != io.EOF {
-		return err
-	}
-	numChunks := int(binary.LittleEndian.Uint64(chuncksize_buff))
-
-	//get original filename
-	nonce := make([]byte, nonceSize)
-	_, err = encFile.ReadAt(nonce, int64(numChunksBufferMax))
-	if err != nil && err != io.EOF {
-		return err
+	if filepath.Ext(encfilePath) != encExt {
+		return fmt.Errorf("\nthis file is not a %s file. Decrypt failed", encExt)
 	}
 
-	encfilenameBuffer := make([]byte, maxFilename_length+gcmTagSize)
-	_, err = encFile.ReadAt(encfilenameBuffer, int64(numChunksBufferMax+nonceSize))
-	if err != nil && err != io.EOF {
-		return err
-	}
+	encFileName := filepath.Base(encfilePath)
+	filename := encFileName[:len(encFileName)-len(encExt)]
+	filePath := filepath.Join(filepath.Dir(encfilePath), filename)
 
-	encfilenameBuffer = append(nonce, encfilenameBuffer...)
-	filenameBuffer, err := decryptBuffer(key, encfilenameBuffer)
-	if err != nil {
-		return err
-	}
-	filename := string(bytes.Trim(filenameBuffer, "\x00"))
-
-	//create the file
-	filePath := filepath.Join(saveDir, filename)
 	file, err := os.Create(filePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("\ncannot create %s\n%s", filePath, err)
 	}
 	defer file.Close()
 
@@ -93,76 +73,105 @@ func DecryptFile(pass string, encfilePath string, saveDir string, numCpu int) er
 		return err
 	}
 
-	readInitialOffset := numChunksBufferMax + len(encfilenameBuffer)
-	originalFileSize := int(encfileInfo.Size()) - readInitialOffset - numChunks*(nonceSize+gcmTagSize)
-	chunkSize := int(originalFileSize / numChunks)
-	lastchunkSize := (originalFileSize % numChunks) + chunkSize
-	lastenc_chunkSize := lastchunkSize + nonceSize + gcmTagSize
-	enc_chunkSize := chunkSize + nonceSize + gcmTagSize
+	numChunks := int(int(encfileInfo.Size()) / enc_chunkSize)
+	lastChunksize := int(encfileInfo.Size()) % enc_chunkSize
 
-	// fmt.Println("Encrypted File size: ", encfileInfo.Size())
-	// fmt.Println("Original File size calculated: ", originalFileSize)
-	// fmt.Printf("Calculated chunks: chunkSize %d, lastchunkSize %d, enc_chunkSize %d\n", chunkSize, lastchunkSize, enc_chunkSize)
-
-	//making the parallelism
+	//setting the parallelism
 	var wg sync.WaitGroup
-	wg.Add(numChunks)
+	wg.Add(numChunks) //one for the progress bar
+	if lastChunksize > 0 {
+		wg.Add(1)
+	}
 
-	for i := 0; i < numChunks-1; i++ {
-		go func(id int, readOffset int, writeOffset int) {
-			defer wg.Done()
+	maxGoroutinesChannel := make(chan struct{}, goroutines)
 
-			//fmt.Printf("chunk %d: read at %d --> writing at %d\n", id, readOffset, writeOffset)
+	//progress bar
+	counter := make(chan int)
 
+	wg.Add(1)
+	go func() {
+		totalPackets := numChunks
+		if lastChunksize > 0 {
+			totalPackets += 1
+		}
+		sum := 0
+		progress <- 0
+		for plus := range counter {
+			sum += plus
+			if sum == totalPackets {
+				close(counter)
+			}
+			progress <- float64(sum) / float64(totalPackets)
+		}
+		close(progress)
+		wg.Done()
+	}()
+
+	//doing the parallelism
+
+	currentReadOffset := 0
+	currentWriteOffset := 0
+	for i := 0; i < numChunks; i++ {
+		go func(readOffset int, writeOffset int) {
+			maxGoroutinesChannel <- struct{}{}
 			buffer := make([]byte, enc_chunkSize)
 			_, err := encFile.ReadAt(buffer, int64(readOffset))
 			if err != nil && err != io.EOF {
-				x := fmt.Errorf("chunk failed reading --> %d", id)
+				x := fmt.Errorf("\nchunk failed reading --> read offset: %d", readOffset)
 				panic(x)
 			}
 
 			data, err := decryptBuffer(key, buffer)
 			if err != nil {
-				x := fmt.Errorf("chunk failed dec --> %d", id)
+				x := fmt.Errorf("\nchunk failed dec --> read offset: %d", readOffset)
 				panic(x)
 			}
 
 			_, err = file.WriteAt(data, int64(writeOffset))
 			if err != nil {
-				x := fmt.Errorf("chunk failed writing --> %d", id)
+				x := fmt.Errorf("\nchunk failed writing --> read offset: %d \t write offset %d", readOffset, writeOffset)
 				panic(x)
 			}
 
-		}(i+1, readInitialOffset+i*enc_chunkSize, i*chunkSize)
+			counter <- 1
+			<-maxGoroutinesChannel
+			wg.Done()
+
+		}(currentReadOffset, currentWriteOffset)
+		currentReadOffset += enc_chunkSize
+		currentWriteOffset += chunkSize
 	}
 
-	go func(id int, readOffset int, writeOffset int) {
-		defer wg.Done()
+	if lastChunksize > 0 {
+		go func(readOffset int, writeOffset int) {
+			maxGoroutinesChannel <- struct{}{}
+			buffer := make([]byte, lastChunksize)
+			_, err := encFile.ReadAt(buffer, int64(readOffset))
+			if err != nil && err != io.EOF {
+				x := fmt.Errorf("\nchunk failed last reading --> read offset: %d", readOffset)
+				panic(x)
+			}
 
-		//fmt.Printf("chunk %d: read at %d --> writing at %d\n", id, readOffset, writeOffset)
+			data, err := decryptBuffer(key, buffer)
+			if err != nil {
+				x := fmt.Errorf("\nchunk failed last dec --> read offset: %d", readOffset)
+				panic(x)
+			}
 
-		buffer := make([]byte, lastenc_chunkSize)
-		_, err := encFile.ReadAt(buffer, int64(readOffset))
-		if err != nil && err != io.EOF {
-			x := fmt.Errorf("chunk failed reading --> %d", id)
-			panic(x)
-		}
+			_, err = file.WriteAt(data, int64(writeOffset))
+			if err != nil {
+				x := fmt.Errorf("\nchunk failed last writing --> read offset: %d \t write offset %d", readOffset, writeOffset)
+				panic(x)
+			}
 
-		data, err := decryptBuffer(key, buffer)
-		if err != nil {
-			x := fmt.Errorf("chunk failed dec --> %d", id)
-			panic(x)
-		}
+			counter <- 1
+			<-maxGoroutinesChannel
+			wg.Done()
 
-		_, err = file.WriteAt(data, int64(writeOffset))
-		if err != nil {
-			x := fmt.Errorf("chunk failed wrtining --> %d", id)
-			panic(x)
-		}
-
-	}(numChunks, readInitialOffset+(numChunks-1)*enc_chunkSize, (numChunks-1)*chunkSize)
+		}(currentReadOffset, currentWriteOffset)
+	}
 
 	wg.Wait()
-
 	return nil
+
 }

@@ -172,6 +172,16 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 	}
 
 	wg.Wait()
+
+	//removing file after decryption
+	err = encFile.Close()
+	if err != nil {
+		return fmt.Errorf("\ncannot close %s\n%s", encfilePath, err)
+	}
+	err = os.Remove(encfilePath)
+	if err != nil {
+		return fmt.Errorf("\ncannot delete %s\n%s", encfilePath, err)
+	}
 	return nil
 
 }

@@ -13,6 +13,12 @@ import (
 	"sync"
 )
 
+/*
+*
+This function encrypt a buffer with a 32 byte key. The resulting encrypted buffer
+will be composed as follow: nonce + enc_buffer + gcmTag
+So, the resulting buffer length will be 28 bytes longer.
+*/
 func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
 	c, err := aes.NewCipher(key[:])
 	if err != nil {
@@ -36,6 +42,9 @@ func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
 	return data, nil
 }
 
+/*
+*
+ */
 func EncryptFile(password string, filePath string, numCpu int, goroutines int, progress chan<- float64) error {
 	//check parameters
 	if numCpu > MaxCPUs || numCpu < 0 {
@@ -57,7 +66,6 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 	if err != nil {
 		return fmt.Errorf("\ncannot open %s\n%s", filePath, err)
 	}
-	defer file.Close()
 
 	filename := filepath.Base(filePath)
 	encFileName := filename + encExt
@@ -174,5 +182,16 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 	}
 
 	wg.Wait()
+
+	//removing file after encryption
+	err = file.Close()
+	if err != nil {
+		return fmt.Errorf("\ncannot close %s\n%s", filePath, err)
+	}
+	err = os.Remove(filePath)
+	if err != nil {
+		return fmt.Errorf("\ncannot delete %s\n%s", filePath, err)
+	}
+
 	return nil
 }

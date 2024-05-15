@@ -20,6 +20,7 @@ func main() {
 	} else {
 		option = os.Args[1]
 		filePath = os.Args[2]
+		//todo useless rn
 	}
 
 	fmt.Print("Insert password: ")

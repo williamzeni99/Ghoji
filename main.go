@@ -16,6 +16,7 @@ func main() {
 
 	if len(os.Args) < 2 {
 		//todo
+		panic("nope")
 	} else {
 		option = os.Args[1]
 		filePath = os.Args[2]

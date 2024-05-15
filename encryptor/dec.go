@@ -36,19 +36,19 @@ func decryptBuffer(key [32]byte, encBuffer []byte) ([]byte, error) {
 // This method decrypt a file with the AES256 with GCM. It split the file in different chunks
 // and decrypt all of them in parallel. If you change the chunkSize between encryption and decryption
 // it will not work.
-// You can set the number of physical cores to use with 'numCpu'.
-// You can also set the max number of 'goroutines' going in parallel (one chunk one goroutine).
+// You can set the number of physical cores to use with 'numCpu', default Max.
+// You can also set the max number of 'goroutines' going in parallel (one chunk one goroutine), default 1000.
 // With 'progress' you can get the advancement updates as a fraction (number between 0 and 1) of the decrypted chunks over all the chunks.
 // IMPORTANT: To decrypt the file you need at least one time the file size free in the hard drive memory. Remember that for each chunk of
 // 1MB you shrink the file of 28 bytes. In addition, the decrypted chunks are stored in a new file and the previous one is then deleted.
 func DecryptFile(password string, encfilePath string, numCpu int, goroutines int, progress chan<- float64) error {
 	//check parameters
-	if numCpu > MaxCPUs || numCpu < 0 {
-		return fmt.Errorf("\nthe number of cpus must be between 1 and  %d", runtime.NumCPU())
+	if numCpu > maxCPUs || numCpu < 0 {
+		numCpu = maxCPUs
 	}
 
 	if goroutines <= 0 {
-		return fmt.Errorf("\nthe number of maxgoroutines must be greater than 0")
+		goroutines = defaultGoRoutines
 	}
 
 	//setting max cpu usage

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go-warshield/encryptor"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -12,19 +13,34 @@ func main() {
 
 	var password string
 	var filePath string
-	var option string
+	var mode string
+	var numCpu int
+	var goroutines int
+	var err error
 
 	if len(os.Args) < 2 {
-		//todo
+		//todo graphic part
 		panic("nope")
 	} else {
-		option = os.Args[1]
+		mode = os.Args[1]
 		filePath = os.Args[2]
-		//todo useless rn
+
+		numCpu, err = strconv.Atoi(os.Args[3])
+		if err != nil {
+			panic(err)
+		}
+
+		goroutines, err = strconv.Atoi(os.Args[4])
+		if err != nil {
+			panic(err)
+		}
+
+		//todo make it better
+
 	}
 
 	fmt.Print("Insert password: ")
-	_, err := fmt.Scanf("%s", &password)
+	_, err = fmt.Scanf("%s", &password)
 	if err != nil {
 		panic(err)
 	}
@@ -44,16 +60,16 @@ func main() {
 
 	startTime := time.Now()
 
-	if option == "enc" {
+	if mode == "enc" {
 		fmt.Printf("Start encryption\n")
-		err := encryptor.EncryptFile(password, filePath, encryptor.MaxCPUs, encryptor.MaxGoRoutines, progress)
+		err := encryptor.EncryptFile(password, filePath, numCpu, goroutines, progress)
 		if err != nil {
 			panic(err)
 		}
 
 	} else {
 		fmt.Println("Start decryption")
-		err = encryptor.DecryptFile(password, filePath, encryptor.MaxCPUs, encryptor.MaxGoRoutines, progress)
+		err = encryptor.DecryptFile(password, filePath, numCpu, goroutines, progress)
 		if err != nil {
 			panic(err)
 		}

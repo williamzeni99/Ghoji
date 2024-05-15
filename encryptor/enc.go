@@ -13,12 +13,9 @@ import (
 	"sync"
 )
 
-/*
-*
-This function encrypt a buffer with a 32 byte key. The resulting encrypted buffer
-will be composed as follow: nonce + enc_buffer + gcmTag
-So, the resulting buffer length will be 28 bytes longer.
-*/
+// This function encrypt a plain byte list with a 32 byte key. The resulting encrypted buffer
+// will be composed as follow: nonce + enc_buffer + gcmTag
+// So, the resulting buffer length will be 28 bytes longer.
 func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
 	c, err := aes.NewCipher(key[:])
 	if err != nil {
@@ -42,9 +39,13 @@ func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
 	return data, nil
 }
 
-/*
-*
- */
+// This method encrypt a file with the AES256 with GCM. It split the file in different chunks
+// and encrypt all of them in parallel.
+// You can set the number of physical cores to use with 'numCpu'.
+// You can also set the max number of 'goroutines' going in parallel (one chunk one goroutine).
+// With 'progress' you can get the advancement updates as a fraction (number between 0 and 1) of the encrypted chunks over all the chunks.
+// IMPORTANT: To encrypt the file you need more than one time the file size free in the hard drive memory. Remember that for each chunk of
+// 1MB you gain 28 bytes. In addition, the encrypted chunks are stored in a new file and the previous one is then deleted.
 func EncryptFile(password string, filePath string, numCpu int, goroutines int, progress chan<- float64) error {
 	//check parameters
 	if numCpu > MaxCPUs || numCpu < 0 {

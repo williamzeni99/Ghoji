@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["enc", "/home/willianzeni/Desktop/NS345.mp4"], 
+            "args": ["enc", "/home/willianzeni/Desktop/Figure_1.png"], 
             "console": "integratedTerminal"
         },
           
@@ -20,7 +20,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "args": ["dec", "/home/willianzeni/Desktop/NS345.mp4.war"], 
+            "args": ["dec", "/home/willianzeni/Desktop/Figure_1.png.war"], 
             "console": "integratedTerminal"
         }
     ]

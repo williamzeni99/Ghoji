@@ -48,12 +48,12 @@ func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
 // 1MB you gain 28 bytes. In addition, the encrypted chunks are stored in a new file and the previous one is then deleted.
 func EncryptFile(password string, filePath string, numCpu int, goroutines int, progress chan<- float64) error {
 	//check parameters
-	if numCpu > maxCPUs || numCpu < 0 {
-		numCpu = maxCPUs
+	if numCpu > MaxCPUs || numCpu < 0 {
+		numCpu = MaxCPUs
 	}
 
 	if goroutines <= 0 {
-		goroutines = defaultGoRoutines
+		goroutines = DefaultGoRoutines
 	}
 
 	//setting max cpu usage

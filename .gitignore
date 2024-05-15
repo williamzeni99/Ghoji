@@ -23,3 +23,5 @@ vscode
 go.work
 
 *.txt
+.vscode/
+.vscode

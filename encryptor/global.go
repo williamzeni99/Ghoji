@@ -2,7 +2,7 @@ package encryptor
 
 import "runtime"
 
-const encExt = ".war"
+const encExt = ".ji"
 const nonceSize = 12
 const gcmTagSize = 16
 const chunkSize = 1024 * 1024 * 1

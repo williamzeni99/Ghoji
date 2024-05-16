@@ -1,4 +1,6 @@
-# go-warshield
+# Ghoji 
 
-This is a Go version of the already existing Warshield project. The purpose of this project is to create a program for encryption. 
-The algorithm implemented is Aes256 with GCM. The project is still under development and updates will be available soon. 
+Ghoji (Go-Hoji, from japanese Hoji mean retention) is a CLI tool for encrypting files with GO. It implements AES256 with GCM, with 1MB chunk size. 
+Each chunk is encrypted in a goroutine, so it fully parallelized. During the encryption you can set the number of physical cores you want to use
+and the number of max goroutines you want to run in parallel. No checks are done on the status of the ram memory usage, so an high number of goroutines
+will cause a crash. Right now you can just encrypt a file per time (also big ones, I tested 10GB file on a 8GB ram and a Intel(R) Core(TM) i5-8300H CPU @ 2.30GHz and it took 15seconds), but improvments are going to be implemented.

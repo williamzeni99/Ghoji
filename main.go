@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"go-warshield/encryptor"
+	"ghoji/encryptor"
 	"os"
 	"sync"
 	"time"
@@ -12,17 +12,18 @@ import (
 
 func main() {
 	app := &cli.App{
-		Name:     "go-warshield",
+		Name:     "ghoji",
 		Usage:    "A CLI tool to encrypt and decrypt files",
 		Version:  "v1.0",
 		Compiled: time.Now(),
 		Authors: []*cli.Author{
-			&cli.Author{
+			{
 				Name:  "William Zeni",
 				Email: "williamzeni56@gmail.com",
 			},
 		},
-		Description: "This is a super fast program for encrypting big files. It implements AES 256 with GCM. Because of the parallelism, the file is deleted after an encrypted copy is made. So, be sure to have enough space in the hard drive when performing an encryption or decryption. In addition, no limit has been set for the power of parallelism, you can set the number of goroutines that can go in parallel. If the size of the file is big enough all of them will be loaded in the ram. IMPORTANT: Do not use too high values or you will have a crash.",
+		EnableBashCompletion: true,
+		Description:          "This is a super fast program for encrypting big files. It implements AES 256 with GCM. Because of the parallelism, the file is deleted after an encrypted copy is made. So, be sure to have enough space in the hard drive when performing an encryption or decryption. In addition, no limit has been set for the power of parallelism, you can set the number of goroutines that can go in parallel. If the size of the file is big enough all of them will be loaded in the ram. IMPORTANT: Do not use too high values or you will have a crash.",
 		Commands: []*cli.Command{
 			{
 				Name:  "encrypt",

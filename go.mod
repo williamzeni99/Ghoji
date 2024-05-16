@@ -1,4 +1,4 @@
-module go-warshield
+module ghoji
 
 go 1.22.2
 

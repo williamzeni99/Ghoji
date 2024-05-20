@@ -9,6 +9,14 @@ import (
 
 func DoEncryption(path string, numCpu int, goroutines int) {
 
+	if numCpu > encryptor.MaxCPUs || numCpu < 0 {
+		numCpu = encryptor.MaxCPUs
+	}
+
+	if goroutines <= 0 {
+		goroutines = encryptor.DefaultGoRoutines
+	}
+
 	var passwd string
 
 	fmt.Print("Insert password: ")

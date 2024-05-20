@@ -53,14 +53,6 @@ func main() {
 					numCpu := c.Int("numCpu")
 					goroutines := c.Int("goroutines")
 
-					if numCpu > encryptor.MaxCPUs || numCpu < 0 {
-						numCpu = encryptor.MaxCPUs
-					}
-
-					if goroutines <= 0 {
-						goroutines = encryptor.DefaultGoRoutines
-					}
-
 					graphic.DoEncryption(path, numCpu, goroutines)
 					return nil
 				},
@@ -92,14 +84,6 @@ func main() {
 					path := c.String("path")
 					numCpu := c.Int("numCpu")
 					goroutines := c.Int("goroutines")
-
-					if numCpu > encryptor.MaxCPUs || numCpu < 0 {
-						numCpu = encryptor.MaxCPUs
-					}
-
-					if goroutines <= 0 {
-						goroutines = encryptor.DefaultGoRoutines
-					}
 
 					graphic.DoDecryption(path, numCpu, goroutines)
 

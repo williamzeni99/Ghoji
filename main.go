@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"ghoji/encryptor"
+	"ghoji/graphic"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -61,39 +61,7 @@ func main() {
 						goroutines = encryptor.DefaultGoRoutines
 					}
 
-					var password string
-
-					fmt.Print("Insert password: ")
-					_, err := fmt.Scanf("%s", &password)
-					if err != nil {
-						panic(err)
-					}
-
-					progress := make(chan float64)
-					var wg sync.WaitGroup
-
-					wg.Add(1)
-					go func() {
-						for p := range progress {
-							fmt.Print("\r")
-							fmt.Printf("Progress: %d %%", int(p*100))
-						}
-						wg.Done()
-					}()
-
-					fmt.Printf("Encrypting file: %s \nwith %d CPUs and %d goroutines\n", path, numCpu, goroutines)
-					startTime := time.Now()
-
-					err = encryptor.EncryptFile(password, path, numCpu, goroutines, progress)
-					if err != nil {
-						panic(err)
-					}
-
-					wg.Wait()
-
-					elapsedTime := time.Since(startTime)
-					fmt.Println("\n\nElapsed time:", elapsedTime)
-
+					graphic.DoEncryption(path, numCpu, goroutines)
 					return nil
 				},
 			},
@@ -133,38 +101,7 @@ func main() {
 						goroutines = encryptor.DefaultGoRoutines
 					}
 
-					var password string
-
-					fmt.Print("Insert password: ")
-					_, err := fmt.Scanf("%s", &password)
-					if err != nil {
-						panic(err)
-					}
-
-					progress := make(chan float64)
-					var wg sync.WaitGroup
-
-					wg.Add(1)
-					go func() {
-						for p := range progress {
-							fmt.Print("\r")
-							fmt.Printf("Progress: %d %%", int(p*100))
-						}
-						wg.Done()
-					}()
-
-					fmt.Printf("Decrypting file: %s \nwith %d CPUs and %d goroutines\n", path, numCpu, goroutines)
-					startTime := time.Now()
-
-					err = encryptor.DecryptFile(password, path, numCpu, goroutines, progress)
-					if err != nil {
-						panic(err)
-					}
-
-					wg.Wait()
-
-					elapsedTime := time.Since(startTime)
-					fmt.Println("\n\nElapsed time:", elapsedTime)
+					graphic.DoDecryption(path, numCpu, goroutines)
 
 					return nil
 				},

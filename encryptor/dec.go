@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-// This function decrypt a buffer with a 32 byte key. The 'encBuffer'
+// This function decrypts a buffer with a 32 byte key. The 'encBuffer'
 // must be composed as follow: nonce + cypherText + gcmTag
 // So, the resulting buffer length will be 28 bytes less.
 func decryptBuffer(key [32]byte, encBuffer []byte) ([]byte, error) {
@@ -33,7 +33,7 @@ func decryptBuffer(key [32]byte, encBuffer []byte) ([]byte, error) {
 
 }
 
-// This method decrypt a file with the AES256 with GCM. It split the file in different chunks
+// This method decrypts a file with the AES256 with GCM. It split the file in different chunks
 // and decrypt all of them in parallel. If you change the chunkSize between encryption and decryption
 // it will not work.
 // You can set the number of physical cores to use with 'numCpu', default Max.
@@ -195,4 +195,60 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 	}
 	return nil
 
+}
+
+// This method decrypts a list of file with the method EncryptFile.
+// You can set the number of files to encrypt in parallel.
+// For numCpu, goroutines read EncryptFile
+// 'progress' is a channel that recieves a 1 for each file encrypted
+// IMPORTANT: high values fro maxfiles can cause a crash. Use it at your own risk
+func DecryptMultipleFiles(password string, filePaths []string, numCpu int, goroutines int, progress chan<- int, maxfiles int) error {
+	var wg sync.WaitGroup
+
+	if maxfiles <= 0 {
+		maxfiles = defaultMaxFiles
+	}
+
+	maxfiles_channel := make(chan struct{}, maxfiles)
+	fileProgress := make([]chan float64, len(filePaths))
+
+	progress <- 0
+
+	for i := range filePaths {
+		fileProgress[i] = make(chan float64)
+	}
+
+	// Funzione per monitorare il progresso di ciascun file
+	monitorProgress := func(index int) {
+		for range fileProgress[index] {
+		}
+		wg.Done()
+	}
+
+	// Avvio dei goroutines per monitorare il progresso
+	for i := range filePaths {
+		wg.Add(1)
+		go monitorProgress(i)
+	}
+
+	// Avvio dei goroutines per cifrare i file
+	for i, filePath := range filePaths {
+		wg.Add(1)
+		go func(index int, path string) {
+			maxfiles_channel <- struct{}{}
+			err := DecryptFile(password, path, numCpu, goroutines, fileProgress[index])
+			if err != nil {
+				fmt.Printf("Decryption errror at file %s: %v\n", path, err)
+				close(progress)
+				return
+			}
+			progress <- 1
+			<-maxfiles_channel
+			wg.Done()
+		}(i, filePath)
+	}
+
+	wg.Wait()
+	close(progress)
+	return nil
 }

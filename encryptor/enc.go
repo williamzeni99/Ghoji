@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-// This function encrypt a plain byte list with a 32 byte key. The resulting encrypted buffer
+// This function encrypts a plain byte list with a 32 byte key. The resulting encrypted buffer
 // will be composed as follow: nonce + enc_buffer + gcmTag
 // So, the resulting buffer length will be 28 bytes longer.
 func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
@@ -39,7 +39,7 @@ func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
 	return data, nil
 }
 
-// This method encrypt a file with the AES256 with GCM. It split the file in different chunks
+// This method encrypts a file with the AES256 with GCM. It split the file in different chunks
 // and encrypt all of them in parallel.
 // You can set the number of physical cores to use with 'numCpu', default Max.
 // You can also set the max number of 'goroutines' going in parallel (one chunk one goroutine), default 1000.
@@ -194,5 +194,61 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 		return fmt.Errorf("\ncannot delete %s\n%s", filePath, err)
 	}
 
+	return nil
+}
+
+// This method encrypts a list of file with the method EncryptFile.
+// You can set the number of files to encrypt in parallel.
+// For numCpu, goroutines read EncryptFile
+// 'progress' is a channel that recieves a 1 for each file encrypted
+// IMPORTANT: high values fro maxfiles can cause a crash. Use it at your own risk
+func EncryptMultipleFiles(password string, filePaths []string, numCpu int, goroutines int, progress chan<- int, maxfiles int) error {
+	var wg sync.WaitGroup
+
+	if maxfiles <= 0 {
+		maxfiles = defaultMaxFiles
+	}
+
+	maxfiles_channel := make(chan struct{}, maxfiles)
+	fileProgress := make([]chan float64, len(filePaths))
+
+	progress <- 0
+
+	for i := range filePaths {
+		fileProgress[i] = make(chan float64)
+	}
+
+	// Funzione per monitorare il progresso di ciascun file
+	monitorProgress := func(index int) {
+		for range fileProgress[index] {
+		}
+		wg.Done()
+	}
+
+	// Avvio dei goroutines per monitorare il progresso
+	for i := range filePaths {
+		wg.Add(1)
+		go monitorProgress(i)
+	}
+
+	// Avvio dei goroutines per cifrare i file
+	for i, filePath := range filePaths {
+		wg.Add(1)
+		go func(index int, path string) {
+			maxfiles_channel <- struct{}{}
+			err := EncryptFile(password, path, numCpu, goroutines, fileProgress[index])
+			if err != nil {
+				fmt.Printf("Encryption error at file %s: %v\n", path, err)
+				close(progress)
+				return
+			}
+			progress <- 1
+			<-maxfiles_channel
+			wg.Done()
+		}(i, filePath)
+	}
+
+	wg.Wait()
+	close(progress)
 	return nil
 }

@@ -27,12 +27,12 @@ func main() {
 		Commands: []*cli.Command{
 			{
 				Name:  "encrypt",
-				Usage: "Encrypt a file",
+				Usage: "Decrypt a file",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "path",
 						Aliases:  []string{"p"},
-						Usage:    "Path to the file to encrypt",
+						Usage:    "Path to the file/dir to decrypt",
 						Required: true,
 					},
 					&cli.IntFlag{
@@ -42,18 +42,26 @@ func main() {
 						Value:   encryptor.MaxCPUs,
 					},
 					&cli.IntFlag{
-						Name:    "goroutines",
-						Aliases: []string{"g"},
-						Usage:   "Maximum number of goroutines to use. High values can cause a crash. Try at your own risk",
+						Name:    "chunks",
+						Aliases: []string{"c"},
+						Usage:   "Number of chunks to encrypt in parallel. High values can cause a crash. Try at your own risk",
 						Value:   encryptor.DefaultGoRoutines,
+					},
+					&cli.IntFlag{
+						Name:    "files",
+						Aliases: []string{"f"},
+						Usage:   "Number of files to encrypt in parallel. High values can cause a crash. Try at your own risk",
+						Value:   1,
 					},
 				},
 				Action: func(c *cli.Context) error {
 					path := c.String("path")
 					numCpu := c.Int("numCpu")
-					goroutines := c.Int("goroutines")
+					chunks := c.Int("chunks")
+					files := c.Int("files")
 
-					graphic.DoEncryption(path, numCpu, goroutines)
+					graphic.DoEncryption(path, numCpu, chunks, files)
+
 					return nil
 				},
 			},
@@ -64,7 +72,7 @@ func main() {
 					&cli.StringFlag{
 						Name:     "path",
 						Aliases:  []string{"p"},
-						Usage:    "Path to the file to decrypt",
+						Usage:    "Path to the file/dir to decrypt",
 						Required: true,
 					},
 					&cli.IntFlag{
@@ -74,18 +82,25 @@ func main() {
 						Value:   encryptor.MaxCPUs,
 					},
 					&cli.IntFlag{
-						Name:    "goroutines",
-						Aliases: []string{"g"},
-						Usage:   "Maximum number of goroutines to use. High values can cause a crash. Try at your own risk",
+						Name:    "chunks",
+						Aliases: []string{"c"},
+						Usage:   "Number of chunks to encrypt in parallel. High values can cause a crash. Try at your own risk",
 						Value:   encryptor.DefaultGoRoutines,
+					},
+					&cli.IntFlag{
+						Name:    "files",
+						Aliases: []string{"f"},
+						Usage:   "Number of files to encrypt in parallel. High values can cause a crash. Try at your own risk",
+						Value:   1,
 					},
 				},
 				Action: func(c *cli.Context) error {
 					path := c.String("path")
 					numCpu := c.Int("numCpu")
-					goroutines := c.Int("goroutines")
+					chunks := c.Int("chunks")
+					files := c.Int("files")
 
-					graphic.DoDecryption(path, numCpu, goroutines)
+					graphic.DoDecryption(path, numCpu, chunks, files)
 
 					return nil
 				},

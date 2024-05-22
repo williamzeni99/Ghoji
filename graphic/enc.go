@@ -8,15 +8,7 @@ import (
 	"time"
 )
 
-func DoEncryption(path string, numCpu int, goroutines int) {
-
-	if numCpu > encryptor.MaxCPUs || numCpu < 0 {
-		numCpu = encryptor.MaxCPUs
-	}
-
-	if goroutines <= 0 {
-		goroutines = encryptor.DefaultGoRoutines
-	}
+func DoEncryption(path string, numCpu int, chunks int, maxfiles int) {
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -34,8 +26,47 @@ func DoEncryption(path string, numCpu int, goroutines int) {
 
 	startTime := time.Now()
 	if info.IsDir() {
-		//todo
+
+		fmt.Printf("Encrypting dir: %s \nwith %d CPUs, %d files per time, %d chunks each file per time\n", path, numCpu, maxfiles, chunks)
+
+		// getting files
+		fmt.Println("Crawling files...")
+		files, err := crawlFiles(path)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("\rCrawled %d files\n\n", len(files))
+
+		// start parallelism
+		var wg sync.WaitGroup
+
+		progress_channel := make(chan int)
+
+		wg.Add(1)
+		go func() {
+			sum := 0
+			for p := range progress_channel {
+				sum += p
+				fmt.Print("\r")
+				fmt.Printf("Progress: %d / %d ", sum, len(files))
+			}
+			wg.Done()
+		}()
+
+		//do encryption
+		err = encryptor.EncryptMultipleFiles(passwd, files, numCpu, chunks, progress_channel, maxfiles)
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+
+		wg.Wait()
+
 	} else {
+
+		fmt.Printf("Encrypting file: %s \nwith %d CPUs and %d goroutines\n", path, numCpu, chunks)
+
 		progress := make(chan float64)
 		var wg sync.WaitGroup
 
@@ -48,9 +79,7 @@ func DoEncryption(path string, numCpu int, goroutines int) {
 			wg.Done()
 		}()
 
-		fmt.Printf("Encrypting file: %s \nwith %d CPUs and %d goroutines\n", path, numCpu, goroutines)
-
-		err = encryptor.EncryptFile(passwd, path, numCpu, goroutines, progress)
+		err = encryptor.EncryptFile(passwd, path, numCpu, chunks, progress)
 		if err != nil {
 			fmt.Println(err.Error())
 			return

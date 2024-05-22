@@ -51,7 +51,7 @@ func main() {
 						Name:    "files",
 						Aliases: []string{"f"},
 						Usage:   "Number of files to encrypt in parallel. High values can cause a crash. Try at your own risk",
-						Value:   1,
+						Value:   encryptor.DefaultMaxFiles,
 					},
 				},
 				Action: func(c *cli.Context) error {
@@ -91,7 +91,7 @@ func main() {
 						Name:    "files",
 						Aliases: []string{"f"},
 						Usage:   "Number of files to encrypt in parallel. High values can cause a crash. Try at your own risk",
-						Value:   1,
+						Value:   encryptor.DefaultMaxFiles,
 					},
 				},
 				Action: func(c *cli.Context) error {

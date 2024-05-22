@@ -206,7 +206,7 @@ func DecryptMultipleFiles(password string, filePaths []string, numCpu int, gorou
 	var wg sync.WaitGroup
 
 	if maxfiles <= 0 {
-		maxfiles = defaultMaxFiles
+		maxfiles = DefaultMaxFiles
 	}
 
 	maxfiles_channel := make(chan struct{}, maxfiles)

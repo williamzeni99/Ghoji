@@ -27,13 +27,19 @@ func main() {
 		Commands: []*cli.Command{
 			{
 				Name:  "encrypt",
-				Usage: "Decrypt a file",
+				Usage: "Encrypt a file",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "path",
 						Aliases:  []string{"p"},
 						Usage:    "Path to the file/dir to decrypt",
 						Required: true,
+					},
+					&cli.IntFlag{
+						Name:    "compress",
+						Aliases: []string{"co"},
+						Usage:   "You can compress the folder before encryption. 0 not compress - 19 high compression. Default 0",
+						Value:   0,
 					},
 					&cli.IntFlag{
 						Name:    "numCpu",
@@ -59,8 +65,9 @@ func main() {
 					numCpu := c.Int("numCpu")
 					chunks := c.Int("chunks")
 					files := c.Int("files")
+					compressLevel := c.Int("compress")
 
-					graphic.DoEncryption(path, numCpu, chunks, files)
+					graphic.DoEncryption(path, numCpu, chunks, files, compressLevel)
 
 					return nil
 				},

@@ -2,8 +2,10 @@ package graphic
 
 import (
 	"fmt"
+	"ghoji/compressor"
 	"ghoji/encryptor"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -79,13 +81,25 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 			wg.Done()
 		}()
 
-		err = encryptor.DecryptFile(passwd, path, numCpu, chunks, progress)
+		newpath, err := encryptor.DecryptFile(passwd, path, numCpu, chunks, progress)
 		if err != nil {
 			fmt.Println(err.Error())
 			return
 		}
 
 		wg.Wait()
+
+		if filepath.Ext(newpath) == ".zst" {
+			newname := filepath.Base(newpath)
+			filename := newname[:len(newname)-len(".zst")]
+			decompressedPath := filepath.Join(filepath.Dir(newpath), filename)
+			err = compressor.DecompressDirectory(newpath, decompressedPath)
+			if err != nil && err.Error() != "not a tar" {
+				fmt.Println(err.Error())
+				return
+			}
+			fmt.Printf("\n\nFind a compressed dir.. \nDecompressed\n")
+		}
 	}
 
 	elapsedTime := time.Since(startTime)

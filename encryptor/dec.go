@@ -41,7 +41,7 @@ func decryptBuffer(key [32]byte, encBuffer []byte) ([]byte, error) {
 // With 'progress' you can get the advancement updates as a fraction (number between 0 and 1) of the decrypted chunks over all the chunks.
 // IMPORTANT: To decrypt the file you need at least one time the file size free in the hard drive memory. Remember that for each chunk of
 // 1MB you shrink the file of 28 bytes. In addition, the decrypted chunks are stored in a new file and the previous one is then deleted.
-func DecryptFile(password string, encfilePath string, numCpu int, goroutines int, progress chan<- float64) error {
+func DecryptFile(password string, encfilePath string, numCpu int, goroutines int, progress chan<- float64) (string, error) {
 	//check parameters
 	if numCpu > MaxCPUs || numCpu < 0 {
 		numCpu = MaxCPUs
@@ -60,12 +60,12 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 	//file opening
 	encFile, err := os.Open(encfilePath)
 	if err != nil {
-		return fmt.Errorf("\ncannot open %s\n%s", encfilePath, err)
+		return "", fmt.Errorf("\ncannot open %s\n%s", encfilePath, err)
 	}
 	defer encFile.Close()
 
 	if filepath.Ext(encfilePath) != encExt {
-		return fmt.Errorf("\nthis file is not a %s file. Decrypt failed", encExt)
+		return "", fmt.Errorf("\nthis file is not a %s file. Decrypt failed", encExt)
 	}
 
 	encFileName := filepath.Base(encfilePath)
@@ -74,14 +74,14 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 
 	file, err := os.Create(filePath)
 	if err != nil {
-		return fmt.Errorf("\ncannot create %s\n%s", filePath, err)
+		return "", fmt.Errorf("\ncannot create %s\n%s", filePath, err)
 	}
 	defer file.Close()
 
 	//setting up the chunks
 	encfileInfo, err := encFile.Stat()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	numChunks := int(int(encfileInfo.Size()) / enc_chunkSize)
@@ -187,13 +187,13 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 	//removing file after decryption
 	err = encFile.Close()
 	if err != nil {
-		return fmt.Errorf("\ncannot close %s\n%s", encfilePath, err)
+		return "", fmt.Errorf("\ncannot close %s\n%s", encfilePath, err)
 	}
 	err = os.Remove(encfilePath)
 	if err != nil {
-		return fmt.Errorf("\ncannot delete %s\n%s", encfilePath, err)
+		return "", fmt.Errorf("\ncannot delete %s\n%s", encfilePath, err)
 	}
-	return nil
+	return filePath, nil
 
 }
 
@@ -236,7 +236,7 @@ func DecryptMultipleFiles(password string, filePaths []string, numCpu int, gorou
 		wg.Add(1)
 		go func(index int, path string) {
 			maxfiles_channel <- struct{}{}
-			err := DecryptFile(password, path, numCpu, goroutines, fileProgress[index])
+			_, err := DecryptFile(password, path, numCpu, goroutines, fileProgress[index])
 			if err != nil {
 				fmt.Printf("Decryption errror at file %s: %v\n", path, err)
 				close(progress)

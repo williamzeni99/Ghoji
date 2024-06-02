@@ -2,13 +2,15 @@ package graphic
 
 import (
 	"fmt"
+	"ghoji/compressor"
 	"ghoji/encryptor"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
-func DoEncryption(path string, numCpu int, chunks int, maxfiles int) {
+func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compressLevel int) {
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -25,6 +27,32 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int) {
 	}
 
 	startTime := time.Now()
+
+	if compressLevel > 0 {
+		if info.IsDir() {
+
+			fmt.Printf("Starting compression of dir: %s \n", path)
+
+			newname := filepath.Base(path) + ".zst"
+			newpath := filepath.Join(filepath.Dir(path), newname)
+
+			err = compressor.CompressDirectory(path, newpath, compressLevel)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			path = newpath
+			info, err = os.Stat(path)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			fmt.Printf("Compressed in dir: %s \n", path)
+		}
+	}
+
 	if info.IsDir() {
 
 		fmt.Printf("Encrypting dir: %s \nwith %d CPUs, %d files per time, %d chunks each file per time\n", path, numCpu, maxfiles, chunks)
@@ -79,7 +107,7 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int) {
 			wg.Done()
 		}()
 
-		err = encryptor.EncryptFile(passwd, path, numCpu, chunks, progress)
+		_, err = encryptor.EncryptFile(passwd, path, numCpu, chunks, progress)
 		if err != nil {
 			fmt.Println(err.Error())
 			return

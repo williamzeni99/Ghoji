@@ -46,7 +46,7 @@ func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
 // With 'progress' you can get the advancement updates as a fraction (number between 0 and 1) of the encrypted chunks over all the chunks.
 // IMPORTANT: To encrypt the file you need more than one time the file size free in the hard drive memory. Remember that for each chunk of
 // 1MB you gain 28 bytes. In addition, the encrypted chunks are stored in a new file and the previous one is then deleted.
-func EncryptFile(password string, filePath string, numCpu int, goroutines int, progress chan<- float64) error {
+func EncryptFile(password string, filePath string, numCpu int, goroutines int, progress chan<- float64) (string, error) {
 	//check parameters
 	if numCpu > MaxCPUs || numCpu < 0 {
 		numCpu = MaxCPUs
@@ -65,7 +65,7 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 	//file opening
 	file, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("\ncannot open %s\n%s", filePath, err)
+		return "", fmt.Errorf("\ncannot open %s\n%s", filePath, err)
 	}
 
 	filename := filepath.Base(filePath)
@@ -74,14 +74,14 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 
 	encFile, err := os.Create(encfilePath)
 	if err != nil {
-		return fmt.Errorf("\ncannot create %s\n%s", encFileName, err)
+		return "", fmt.Errorf("\ncannot create %s\n%s", encFileName, err)
 	}
 	defer encFile.Close()
 
 	//setting up the chunks
 	fileInfo, err := file.Stat()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	numChunks := int(int(fileInfo.Size()) / chunkSize)
@@ -187,14 +187,14 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 	//removing file after encryption
 	err = file.Close()
 	if err != nil {
-		return fmt.Errorf("\ncannot close %s\n%s", filePath, err)
+		return "", fmt.Errorf("\ncannot close %s\n%s", filePath, err)
 	}
 	err = os.Remove(filePath)
 	if err != nil {
-		return fmt.Errorf("\ncannot delete %s\n%s", filePath, err)
+		return "", fmt.Errorf("\ncannot delete %s\n%s", filePath, err)
 	}
 
-	return nil
+	return encfilePath, nil
 }
 
 // This method encrypts a list of file with the method EncryptFile.
@@ -236,7 +236,7 @@ func EncryptMultipleFiles(password string, filePaths []string, numCpu int, gorou
 		wg.Add(1)
 		go func(index int, path string) {
 			maxfiles_channel <- struct{}{}
-			err := EncryptFile(password, path, numCpu, goroutines, fileProgress[index])
+			_, err := EncryptFile(password, path, numCpu, goroutines, fileProgress[index])
 			if err != nil {
 				fmt.Printf("Encryption error at file %s: %v\n", path, err)
 				close(progress)

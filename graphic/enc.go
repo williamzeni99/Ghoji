@@ -18,12 +18,10 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compress bo
 		return
 	}
 
-	var passwd string
-
-	fmt.Print("Insert password: ")
-	_, err = fmt.Scanf("%s", &passwd)
+	passwd, err := readPassword()
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		return
 	}
 
 	startTime := time.Now()

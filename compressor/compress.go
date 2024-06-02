@@ -114,9 +114,8 @@ func DecompressDirectory(inputFilePath, outputDir string, progress chan<- float6
 	defer zstdReader.Close()
 
 	// Create a tar reader
-	tarReader := tar.NewReader(zstdReader)
-
 	totalFiles := 0
+	tarReader := tar.NewReader(zstdReader)
 	for {
 		_, err := tarReader.Next()
 		if err == io.EOF {
@@ -128,8 +127,14 @@ func DecompressDirectory(inputFilePath, outputDir string, progress chan<- float6
 		totalFiles++
 	}
 
+	//reset file
+	inputFile.Seek(0, io.SeekStart)
+	zstdReader.Reset(inputFile)
+	tarReader = tar.NewReader(zstdReader)
+
 	progress <- 0.0
 	decompressedFiles := 0
+
 	// Extract files from the tar archive
 	for {
 		header, err := tarReader.Next()
@@ -139,7 +144,6 @@ func DecompressDirectory(inputFilePath, outputDir string, progress chan<- float6
 		if err != nil {
 			return fmt.Errorf("not a tar")
 		}
-
 		// Determine the output path
 		outputPath := filepath.Join(outputDir, header.Name)
 

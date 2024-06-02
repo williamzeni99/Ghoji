@@ -18,12 +18,10 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 		return
 	}
 
-	var passwd string
-
-	fmt.Print("Insert password: ")
-	_, err = fmt.Scanf("%s", &passwd)
+	passwd, err := readPassword()
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		return
 	}
 
 	startTime := time.Now()
@@ -108,7 +106,7 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 			}()
 
 			err = compressor.DecompressDirectory(newpath, decompressedPath, progress)
-			if err != nil && err.Error() != "not a tar" {
+			if err != nil {
 				fmt.Println(err.Error())
 				return
 			}

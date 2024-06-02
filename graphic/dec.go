@@ -93,12 +93,28 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 			newname := filepath.Base(newpath)
 			filename := newname[:len(newname)-len(".zst")]
 			decompressedPath := filepath.Join(filepath.Dir(newpath), filename)
-			err = compressor.DecompressDirectory(newpath, decompressedPath)
+
+			progress := make(chan float64)
+			var wg sync.WaitGroup
+
+			fmt.Printf("\nFound a compressed dir.. \n")
+			wg.Add(1)
+			go func() {
+				for p := range progress {
+					fmt.Print("\r")
+					fmt.Printf("Progress: %d %%", int(p*100))
+				}
+				wg.Done()
+			}()
+
+			err = compressor.DecompressDirectory(newpath, decompressedPath, progress)
 			if err != nil && err.Error() != "not a tar" {
 				fmt.Println(err.Error())
 				return
 			}
-			fmt.Printf("\n\nFind a compressed dir.. \nDecompressed\n")
+
+			wg.Wait()
+			fmt.Printf("\n\nDecompressed\n")
 		}
 	}
 

@@ -35,11 +35,11 @@ func main() {
 						Usage:    "Path to the file/dir to decrypt",
 						Required: true,
 					},
-					&cli.IntFlag{
+					&cli.BoolFlag{
 						Name:    "compress",
 						Aliases: []string{"co"},
-						Usage:   "You can compress the folder before encryption. Refer to zstd standard. Default 0",
-						Value:   0,
+						Usage:   "You can compress the folder before encryption.",
+						Value:   false,
 					},
 					&cli.IntFlag{
 						Name:    "numCpu",
@@ -65,9 +65,9 @@ func main() {
 					numCpu := c.Int("numCpu")
 					chunks := c.Int("chunks")
 					files := c.Int("files")
-					compressLevel := c.Int("compress")
+					compress := c.Bool("compress")
 
-					graphic.DoEncryption(path, numCpu, chunks, files, compressLevel)
+					graphic.DoEncryption(path, numCpu, chunks, files, compress)
 
 					return nil
 				},

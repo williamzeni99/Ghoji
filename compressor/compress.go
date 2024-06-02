@@ -10,10 +10,10 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-const DefaultCompresissionLevel = 4
+const DefaultCompresissionLevel = 3
 
 // CompressDirectory compresses the directory at inputDir and writes the compressed output to outputFilePath
-func CompressDirectory(inputDir, outputFilePath string, compressionLevel int) error {
+func CompressDirectory(inputDir, outputFilePath string, compressionLevel int, progress chan<- float64) error {
 
 	// Create the output file
 	outputFile, err := os.Create(outputFilePath)
@@ -33,7 +33,17 @@ func CompressDirectory(inputDir, outputFilePath string, compressionLevel int) er
 	tarWriter := tar.NewWriter(zstdWriter)
 	defer tarWriter.Close()
 
+	totalFiles := 0
+	filepath.Walk(inputDir, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			totalFiles++
+		}
+		return nil
+	})
+
 	// Walk through the input directory and add files to the tar archive
+	compressedFiles := 0
+	progress <- 0.0
 	err = filepath.Walk(inputDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -67,6 +77,8 @@ func CompressDirectory(inputDir, outputFilePath string, compressionLevel int) er
 			if _, err := io.Copy(tarWriter, file); err != nil {
 				return err
 			}
+			compressedFiles++
+			progress <- float64(compressedFiles) / float64(totalFiles)
 		}
 
 		return nil
@@ -81,11 +93,12 @@ func CompressDirectory(inputDir, outputFilePath string, compressionLevel int) er
 		return err
 	}
 
+	close(progress)
 	return nil
 }
 
 // DecompressDirectory decompresses the zstd compressed file at inputFilePath and extracts it to outputDir
-func DecompressDirectory(inputFilePath, outputDir string) error {
+func DecompressDirectory(inputFilePath, outputDir string, progress chan<- float64) error {
 	// Open the input file
 	inputFile, err := os.Open(inputFilePath)
 	if err != nil {
@@ -103,6 +116,20 @@ func DecompressDirectory(inputFilePath, outputDir string) error {
 	// Create a tar reader
 	tarReader := tar.NewReader(zstdReader)
 
+	totalFiles := 0
+	for {
+		_, err := tarReader.Next()
+		if err == io.EOF {
+			break // End of archive
+		}
+		if err != nil {
+			return fmt.Errorf("not a tar")
+		}
+		totalFiles++
+	}
+
+	progress <- 0.0
+	decompressedFiles := 0
 	// Extract files from the tar archive
 	for {
 		header, err := tarReader.Next()
@@ -136,6 +163,9 @@ func DecompressDirectory(inputFilePath, outputDir string) error {
 		default:
 			return fmt.Errorf("unknown tar header type: %v", header.Typeflag)
 		}
+
+		decompressedFiles++
+		progress <- float64(decompressedFiles) / float64(totalFiles)
 	}
 
 	err = os.Remove(inputFilePath)
@@ -143,5 +173,6 @@ func DecompressDirectory(inputFilePath, outputDir string) error {
 		return err
 	}
 
+	close(progress)
 	return nil
 }

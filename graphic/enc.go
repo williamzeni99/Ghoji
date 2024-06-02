@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compressLevel int) {
+func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compress bool) {
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -28,7 +28,7 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compressLev
 
 	startTime := time.Now()
 
-	if compressLevel > 0 {
+	if compress {
 		if info.IsDir() {
 
 			fmt.Printf("Starting compression of dir: %s \n", path)
@@ -36,11 +36,27 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compressLev
 			newname := filepath.Base(path) + ".zst"
 			newpath := filepath.Join(filepath.Dir(path), newname)
 
-			err = compressor.CompressDirectory(path, newpath, compressLevel)
+			progress := make(chan float64)
+
+			var wg sync.WaitGroup
+
+			wg.Add(1)
+			go func() {
+				for p := range progress {
+					fmt.Print("\r")
+					fmt.Printf("Progress: %d %%", int(p*100))
+				}
+				wg.Done()
+			}()
+
+			err = compressor.CompressDirectory(path, newpath, compressor.DefaultCompresissionLevel, progress)
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
+
+			wg.Wait()
+			fmt.Printf("\nCompressed in dir: %s \n", path)
 
 			path = newpath
 			info, err = os.Stat(path)
@@ -49,7 +65,6 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compressLev
 				return
 			}
 
-			fmt.Printf("Compressed in dir: %s \n", path)
 		}
 	}
 

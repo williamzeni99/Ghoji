@@ -38,7 +38,7 @@ func main() {
 					&cli.IntFlag{
 						Name:    "compress",
 						Aliases: []string{"co"},
-						Usage:   "You can compress the folder before encryption. 0 not compress - 19 high compression. Default 0",
+						Usage:   "You can compress the folder before encryption. Refer to zstd standard. Default 0",
 						Value:   0,
 					},
 					&cli.IntFlag{

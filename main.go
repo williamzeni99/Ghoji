@@ -32,7 +32,7 @@ func main() {
 					&cli.StringFlag{
 						Name:     "path",
 						Aliases:  []string{"p"},
-						Usage:    "Path to the file/dir to decrypt",
+						Usage:    "Path to the file/dir to encrypt",
 						Required: true,
 					},
 					&cli.BoolFlag{

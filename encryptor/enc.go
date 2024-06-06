@@ -5,7 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"fmt"
+	"ghoji/ghojierrors"
 	"io"
 	"os"
 	"path/filepath"
@@ -46,7 +46,7 @@ func encryptBuffer(key [32]byte, buffer []byte) ([]byte, error) {
 // With 'progress' you can get the advancement updates as a fraction (number between 0 and 1) of the encrypted chunks over all the chunks.
 // IMPORTANT: To encrypt the file you need more than one time the file size free in the hard drive memory. Remember that for each chunk of
 // 1MB you gain 28 bytes. In addition, the encrypted chunks are stored in a new file and the previous one is then deleted.
-func EncryptFile(password string, filePath string, numCpu int, goroutines int, progress chan<- float64) (string, error) {
+func EncryptFile(password string, filePath string, numCpu int, goroutines int, progress chan<- float64, errors chan<- ghojierrors.Handable) string {
 	//check parameters
 	if numCpu > MaxCPUs || numCpu < 0 {
 		numCpu = MaxCPUs
@@ -65,7 +65,8 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 	//file opening
 	file, err := os.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("\ncannot open %s\n%s", filePath, err)
+		errors <- &ghojierrors.OpenFileError{Path: filePath, Error: err}
+		return ""
 	}
 
 	filename := filepath.Base(filePath)
@@ -74,14 +75,16 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 
 	encFile, err := os.Create(encfilePath)
 	if err != nil {
-		return "", fmt.Errorf("\ncannot create %s\n%s", encFileName, err)
+		errors <- &ghojierrors.CreateFileError{Path: encfilePath, Error: err}
+		return ""
 	}
 	defer encFile.Close()
 
 	//setting up the chunks
 	fileInfo, err := file.Stat()
 	if err != nil {
-		return "", err
+		errors <- &ghojierrors.InfoFileError{Path: filePath, Error: err}
+		return ""
 	}
 
 	numChunks := int(int(fileInfo.Size()) / chunkSize)
@@ -95,6 +98,20 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 	}
 
 	maxGoroutinesChannel := make(chan struct{}, goroutines)
+
+	//menaging one error on just one chunk
+	chunksFailed := make(chan bool)
+	first := true
+	wg.Add(1)
+	go func() {
+		for boolean := range chunksFailed {
+			if first && boolean {
+				first = false
+				errors <- &ghojierrors.FileEncryptionFailed{Path: filePath}
+			}
+		}
+		wg.Done()
+	}()
 
 	// progress bar
 	counter := make(chan int)
@@ -115,6 +132,7 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 			progress <- float64(sum) / float64(totalPackets)
 		}
 		close(progress)
+		close(chunksFailed)
 		wg.Done()
 	}()
 
@@ -128,20 +146,17 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 			buffer := make([]byte, chunkSize)
 			_, err := file.ReadAt(buffer, int64(readOffset))
 			if err != nil && err != io.EOF {
-				x := fmt.Errorf("\nchunk failed reading --> read offset: %d", readOffset)
-				panic(x)
-			}
-
-			data, err := encryptBuffer(key, buffer)
-			if err != nil {
-				x := fmt.Errorf("\nchunk failed enc --> read offset: %d", readOffset)
-				panic(x)
-			}
-
-			_, err = encFile.WriteAt(data, int64(writeOffset))
-			if err != nil {
-				x := fmt.Errorf("\nchunk failed writing --> read offset: %d \t write offset %d", readOffset, writeOffset)
-				panic(x)
+				chunksFailed <- true
+			} else {
+				data, err := encryptBuffer(key, buffer)
+				if err != nil {
+					chunksFailed <- true
+				} else {
+					_, err = encFile.WriteAt(data, int64(writeOffset))
+					if err != nil {
+						chunksFailed <- true
+					}
+				}
 			}
 
 			counter <- 1
@@ -159,20 +174,17 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 			buffer := make([]byte, lastChunksize)
 			_, err := file.ReadAt(buffer, int64(readOffset))
 			if err != nil && err != io.EOF {
-				x := fmt.Errorf("\nchunk failed last reading --> read offset: %d", readOffset)
-				panic(x)
-			}
-
-			data, err := encryptBuffer(key, buffer)
-			if err != nil {
-				x := fmt.Errorf("\nchunk failed last enc --> read offset: %d", readOffset)
-				panic(x)
-			}
-
-			_, err = encFile.WriteAt(data, int64(writeOffset))
-			if err != nil {
-				x := fmt.Errorf("\nchunk failed last writing --> read offset: %d \t write offset %d", readOffset, writeOffset)
-				panic(x)
+				chunksFailed <- true
+			} else {
+				data, err := encryptBuffer(key, buffer)
+				if err != nil {
+					chunksFailed <- true
+				} else {
+					_, err = encFile.WriteAt(data, int64(writeOffset))
+					if err != nil {
+						chunksFailed <- true
+					}
+				}
 			}
 
 			counter <- 1
@@ -184,17 +196,24 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 
 	wg.Wait()
 
+	//if there was errors
+	if !first {
+		return ""
+	}
+
 	//removing file after encryption
 	err = file.Close()
 	if err != nil {
-		return "", fmt.Errorf("\ncannot close %s\n%s", filePath, err)
+		errors <- &ghojierrors.CloseFileError{Path: filePath, Error: err}
+		return ""
 	}
 	err = os.Remove(filePath)
 	if err != nil {
-		return "", fmt.Errorf("\ncannot delete %s\n%s", filePath, err)
+		errors <- &ghojierrors.RemoveFileError{Path: filePath, Error: err}
+		return ""
 	}
 
-	return encfilePath, nil
+	return encfilePath
 }
 
 // This method encrypts a list of file with the method EncryptFile.
@@ -202,7 +221,7 @@ func EncryptFile(password string, filePath string, numCpu int, goroutines int, p
 // For numCpu, goroutines read EncryptFile
 // 'progress' is a channel that recieves a 1 for each file encrypted
 // IMPORTANT: high values fro maxfiles can cause a crash. Use it at your own risk
-func EncryptMultipleFiles(password string, filePaths []string, numCpu int, goroutines int, progress chan<- int, maxfiles int) error {
+func EncryptMultipleFiles(password string, filePaths []string, numCpu int, goroutines int, progress chan<- int, maxfiles int, errors chan<- ghojierrors.Handable) {
 	var wg sync.WaitGroup
 
 	if maxfiles <= 0 {
@@ -236,12 +255,7 @@ func EncryptMultipleFiles(password string, filePaths []string, numCpu int, gorou
 		wg.Add(1)
 		go func(index int, path string) {
 			maxfiles_channel <- struct{}{}
-			_, err := EncryptFile(password, path, numCpu, goroutines, fileProgress[index])
-			if err != nil {
-				fmt.Printf("Encryption error at file %s: %v\n", path, err)
-				close(progress)
-				return
-			}
+			_ = EncryptFile(password, path, numCpu, goroutines, fileProgress[index], errors)
 			progress <- 1
 			<-maxfiles_channel
 			wg.Done()
@@ -250,5 +264,4 @@ func EncryptMultipleFiles(password string, filePaths []string, numCpu int, gorou
 
 	wg.Wait()
 	close(progress)
-	return nil
 }

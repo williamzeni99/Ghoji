@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"ghoji/compressor"
 	"ghoji/encryptor"
+	"ghoji/ghojierrors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,16 +13,18 @@ import (
 
 func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 
+	errors := ghojierrors.GetErrorHandler()
+
 	info, err := os.Stat(path)
 	if err != nil {
-		fmt.Println(err)
-		return
+		errors <- &ghojierrors.InfoFileError{Path: path, Error: err}
+		close(errors)
 	}
 
 	passwd, err := readPassword()
 	if err != nil {
-		fmt.Println(err)
-		return
+		errors <- &ghojierrors.ReadPasswordError{Error: err}
+		close(errors)
 	}
 
 	startTime := time.Now()
@@ -33,8 +36,8 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 		fmt.Println("Crawling files...")
 		files, err := crawlFiles(path)
 		if err != nil {
-			fmt.Println(err)
-			return
+			errors <- &ghojierrors.CrawlingFilesError{Path: path, Error: err}
+			close(errors)
 		}
 		fmt.Printf("\rCrawled %d files\n\n", len(files))
 
@@ -54,13 +57,8 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 			wg.Done()
 		}()
 
-		//do encryption
-		err = encryptor.DecryptMultipleFiles(passwd, files, numCpu, chunks, progress_channel, maxfiles)
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-
+		//do decryption
+		encryptor.DecryptMultipleFiles(passwd, files, numCpu, chunks, progress_channel, maxfiles, errors)
 		wg.Wait()
 
 	} else {
@@ -79,13 +77,13 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 			wg.Done()
 		}()
 
-		newpath, err := encryptor.DecryptFile(passwd, path, numCpu, chunks, progress)
-		if err != nil {
-			fmt.Println(err.Error())
+		newpath := encryptor.DecryptFile(passwd, path, numCpu, chunks, progress, errors)
+		wg.Wait()
+
+		if newpath == "" {
+			close(errors)
 			return
 		}
-
-		wg.Wait()
 
 		if filepath.Ext(newpath) == ".zst" {
 			newname := filepath.Base(newpath)
@@ -107,15 +105,15 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 
 			err = compressor.DecompressDirectory(newpath, decompressedPath, progress)
 			if err != nil {
-				fmt.Println(err.Error())
-				return
+				errors <- &ghojierrors.CompressionError{Path: newpath, Error: err}
+				close(errors)
 			}
 
 			wg.Wait()
 			fmt.Printf("\n\nDecompressed\n")
 		}
 	}
-
+	close(errors)
 	elapsedTime := time.Since(startTime)
 	fmt.Println("\n\nElapsed time:", elapsedTime)
 }

@@ -4,7 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
-	"fmt"
+	"ghoji/ghojierrors"
 	"io"
 	"os"
 	"path/filepath"
@@ -41,7 +41,7 @@ func decryptBuffer(key [32]byte, encBuffer []byte) ([]byte, error) {
 // With 'progress' you can get the advancement updates as a fraction (number between 0 and 1) of the decrypted chunks over all the chunks.
 // IMPORTANT: To decrypt the file you need at least one time the file size free in the hard drive memory. Remember that for each chunk of
 // 1MB you shrink the file of 28 bytes. In addition, the decrypted chunks are stored in a new file and the previous one is then deleted.
-func DecryptFile(password string, encfilePath string, numCpu int, goroutines int, progress chan<- float64) (string, error) {
+func DecryptFile(password string, encfilePath string, numCpu int, goroutines int, progress chan<- float64, errors chan<- ghojierrors.Handable) string {
 	//check parameters
 	if numCpu > MaxCPUs || numCpu < 0 {
 		numCpu = MaxCPUs
@@ -60,12 +60,14 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 	//file opening
 	encFile, err := os.Open(encfilePath)
 	if err != nil {
-		return "", fmt.Errorf("\ncannot open %s\n%s", encfilePath, err)
+		errors <- &ghojierrors.OpenFileError{Path: encfilePath}
+		close(errors)
 	}
 	defer encFile.Close()
 
 	if filepath.Ext(encfilePath) != encExt {
-		return "", fmt.Errorf("\nthis file is not a %s file. Decrypt failed", encExt)
+		errors <- &ghojierrors.FileExtDecryptionFailed{Path: encfilePath}
+		close(errors)
 	}
 
 	encFileName := filepath.Base(encfilePath)
@@ -74,14 +76,16 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 
 	file, err := os.Create(filePath)
 	if err != nil {
-		return "", fmt.Errorf("\ncannot create %s\n%s", filePath, err)
+		errors <- &ghojierrors.CreateFileError{Path: filePath, Error: err}
+		close(errors)
 	}
 	defer file.Close()
 
 	//setting up the chunks
 	encfileInfo, err := encFile.Stat()
 	if err != nil {
-		return "", err
+		errors <- &ghojierrors.InfoFileError{Path: encfilePath, Error: err}
+		close(errors)
 	}
 
 	numChunks := int(int(encfileInfo.Size()) / enc_chunkSize)
@@ -95,6 +99,20 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 	}
 
 	maxGoroutinesChannel := make(chan struct{}, goroutines)
+
+	//menaging one error on just one chunk
+	chunksFailed := make(chan bool)
+	first := true
+	wg.Add(1)
+	go func() {
+		for boolean := range chunksFailed {
+			if first && boolean {
+				first = false
+				errors <- &ghojierrors.FileDecryptionFailed{Path: filePath}
+			}
+		}
+		wg.Done()
+	}()
 
 	//progress bar
 	counter := make(chan int)
@@ -115,6 +133,7 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 			progress <- float64(sum) / float64(totalPackets)
 		}
 		close(progress)
+		close(chunksFailed)
 		wg.Done()
 	}()
 
@@ -128,20 +147,17 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 			buffer := make([]byte, enc_chunkSize)
 			_, err := encFile.ReadAt(buffer, int64(readOffset))
 			if err != nil && err != io.EOF {
-				x := fmt.Errorf("\nchunk failed reading --> read offset: %d", readOffset)
-				panic(x)
-			}
-
-			data, err := decryptBuffer(key, buffer)
-			if err != nil {
-				x := fmt.Errorf("\nchunk failed dec --> read offset: %d", readOffset)
-				panic(x)
-			}
-
-			_, err = file.WriteAt(data, int64(writeOffset))
-			if err != nil {
-				x := fmt.Errorf("\nchunk failed writing --> read offset: %d \t write offset %d", readOffset, writeOffset)
-				panic(x)
+				chunksFailed <- true
+			} else {
+				data, err := decryptBuffer(key, buffer)
+				if err != nil {
+					chunksFailed <- true
+				} else {
+					_, err = file.WriteAt(data, int64(writeOffset))
+					if err != nil {
+						chunksFailed <- true
+					}
+				}
 			}
 
 			counter <- 1
@@ -159,22 +175,18 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 			buffer := make([]byte, lastChunksize)
 			_, err := encFile.ReadAt(buffer, int64(readOffset))
 			if err != nil && err != io.EOF {
-				x := fmt.Errorf("\nchunk failed last reading --> read offset: %d", readOffset)
-				panic(x)
+				chunksFailed <- true
+			} else {
+				data, err := decryptBuffer(key, buffer)
+				if err != nil {
+					chunksFailed <- true
+				} else {
+					_, err = file.WriteAt(data, int64(writeOffset))
+					if err != nil {
+						chunksFailed <- true
+					}
+				}
 			}
-
-			data, err := decryptBuffer(key, buffer)
-			if err != nil {
-				x := fmt.Errorf("\nchunk failed last dec --> read offset: %d", readOffset)
-				panic(x)
-			}
-
-			_, err = file.WriteAt(data, int64(writeOffset))
-			if err != nil {
-				x := fmt.Errorf("\nchunk failed last writing --> read offset: %d \t write offset %d", readOffset, writeOffset)
-				panic(x)
-			}
-
 			counter <- 1
 			<-maxGoroutinesChannel
 			wg.Done()
@@ -184,16 +196,22 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 
 	wg.Wait()
 
+	if !first {
+		return ""
+	}
+
 	//removing file after decryption
 	err = encFile.Close()
 	if err != nil {
-		return "", fmt.Errorf("\ncannot close %s\n%s", encfilePath, err)
+		errors <- &ghojierrors.CloseFileError{Path: encfilePath, Error: err}
+		return ""
 	}
 	err = os.Remove(encfilePath)
 	if err != nil {
-		return "", fmt.Errorf("\ncannot delete %s\n%s", encfilePath, err)
+		errors <- &ghojierrors.RemoveFileError{Path: encfilePath, Error: err}
+		return ""
 	}
-	return filePath, nil
+	return filePath
 
 }
 
@@ -202,7 +220,7 @@ func DecryptFile(password string, encfilePath string, numCpu int, goroutines int
 // For numCpu, goroutines read EncryptFile
 // 'progress' is a channel that recieves a 1 for each file encrypted
 // IMPORTANT: high values fro maxfiles can cause a crash. Use it at your own risk
-func DecryptMultipleFiles(password string, filePaths []string, numCpu int, goroutines int, progress chan<- int, maxfiles int) error {
+func DecryptMultipleFiles(password string, filePaths []string, numCpu int, goroutines int, progress chan<- int, maxfiles int, errors chan<- ghojierrors.Handable) {
 	var wg sync.WaitGroup
 
 	if maxfiles <= 0 {
@@ -236,12 +254,7 @@ func DecryptMultipleFiles(password string, filePaths []string, numCpu int, gorou
 		wg.Add(1)
 		go func(index int, path string) {
 			maxfiles_channel <- struct{}{}
-			_, err := DecryptFile(password, path, numCpu, goroutines, fileProgress[index])
-			if err != nil {
-				fmt.Printf("Decryption errror at file %s: %v\n", path, err)
-				close(progress)
-				return
-			}
+			_ = DecryptFile(password, path, numCpu, goroutines, fileProgress[index], errors)
 			progress <- 1
 			<-maxfiles_channel
 			wg.Done()
@@ -250,5 +263,4 @@ func DecryptMultipleFiles(password string, filePaths []string, numCpu int, gorou
 
 	wg.Wait()
 	close(progress)
-	return nil
 }

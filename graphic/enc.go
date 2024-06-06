@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"ghoji/compressor"
 	"ghoji/encryptor"
+	"ghoji/ghojierrors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,16 +13,18 @@ import (
 
 func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compress bool) {
 
+	errors := ghojierrors.GetErrorHandler()
+
 	info, err := os.Stat(path)
 	if err != nil {
-		fmt.Println(err)
-		return
+		errors <- &ghojierrors.InfoFileError{Path: path, Error: err}
+		close(errors)
 	}
 
 	passwd, err := readPassword()
 	if err != nil {
-		fmt.Println(err)
-		return
+		errors <- &ghojierrors.ReadPasswordError{Error: err}
+		close(errors)
 	}
 
 	startTime := time.Now()
@@ -49,8 +52,8 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compress bo
 
 			err = compressor.CompressDirectory(path, newpath, compressor.DefaultCompresissionLevel, progress)
 			if err != nil {
-				fmt.Println(err)
-				return
+				errors <- &ghojierrors.CompressionError{Path: path, Error: err}
+				close(errors)
 			}
 
 			wg.Wait()
@@ -59,8 +62,8 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compress bo
 			path = newpath
 			info, err = os.Stat(path)
 			if err != nil {
-				fmt.Println(err)
-				return
+				errors <- &ghojierrors.InfoFileError{Path: path, Error: err}
+				close(errors)
 			}
 
 		}
@@ -74,8 +77,8 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compress bo
 		fmt.Println("Crawling files...")
 		files, err := crawlFiles(path)
 		if err != nil {
-			fmt.Println(err)
-			return
+			errors <- &ghojierrors.CrawlingFilesError{Path: path, Error: err}
+			close(errors)
 		}
 		fmt.Printf("\rCrawled %d files\n\n", len(files))
 
@@ -96,12 +99,7 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compress bo
 		}()
 
 		//do encryption
-		err = encryptor.EncryptMultipleFiles(passwd, files, numCpu, chunks, progress_channel, maxfiles)
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-
+		encryptor.EncryptMultipleFiles(passwd, files, numCpu, chunks, progress_channel, maxfiles, errors)
 		wg.Wait()
 
 	} else {
@@ -120,15 +118,10 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compress bo
 			wg.Done()
 		}()
 
-		_, err = encryptor.EncryptFile(passwd, path, numCpu, chunks, progress)
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-
+		_ = encryptor.EncryptFile(passwd, path, numCpu, chunks, progress, errors)
 		wg.Wait()
 	}
-
+	close(errors)
 	elapsedTime := time.Since(startTime)
 	fmt.Println("\n\nElapsed time:", elapsedTime)
 

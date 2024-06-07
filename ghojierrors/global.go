@@ -3,6 +3,7 @@ package ghojierrors
 import (
 	"fmt"
 	"os"
+	"sync"
 )
 
 type Handable interface {
@@ -17,7 +18,6 @@ type OpenFileError struct {
 }
 
 func (e *OpenFileError) Handle() {
-	//
 }
 
 func (e *OpenFileError) Message() {
@@ -101,14 +101,28 @@ type CompressionError struct {
 }
 
 func (e *CompressionError) Handle() {
-	//
+	os.Remove(e.Path)
 }
 
 func (e *CompressionError) Message() {
 	fmt.Printf("\n\n[!]Error: Compression failed.\npath: %s\nTrigger: %s\n\n", e.Path, e.Error)
 }
 
-// Compression Error
+// Decompression Error
+type DecompressionError struct {
+	Path  string
+	Error error
+}
+
+func (e *DecompressionError) Handle() {
+	os.Remove(e.Path)
+}
+
+func (e *DecompressionError) Message() {
+	fmt.Printf("\n\n[!]Error: Decompression failed.\npath: %s\nTrigger: %s\n\n", e.Path, e.Error)
+}
+
+// Crawling Error
 type CrawlingFilesError struct {
 	Path  string
 	Error error
@@ -189,13 +203,21 @@ func GetErrorHandler() chan Handable {
 	go func() {
 		first := true
 
+		var wg sync.WaitGroup
+
 		for err := range errors {
+			wg.Add(1)
 			if first {
 				err.Message()
 				first = false
 			}
-			err.Handle()
+			go func(ghojierror Handable) {
+				ghojierror.Handle()
+				wg.Done()
+			}(err)
 		}
+
+		wg.Wait()
 
 		if !first {
 			os.Exit(0)

@@ -19,12 +19,14 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 	if err != nil {
 		errors <- &ghojierrors.InfoFileError{Path: path, Error: err}
 		close(errors)
+		return
 	}
 
 	passwd, err := readPassword()
 	if err != nil {
 		errors <- &ghojierrors.ReadPasswordError{Error: err}
 		close(errors)
+		return
 	}
 
 	startTime := time.Now()
@@ -38,6 +40,7 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 		if err != nil {
 			errors <- &ghojierrors.CrawlingFilesError{Path: path, Error: err}
 			close(errors)
+			return
 		}
 		fmt.Printf("\rCrawled %d files\n\n", len(files))
 
@@ -80,10 +83,10 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 		newpath := encryptor.DecryptFile(passwd, path, numCpu, chunks, progress, errors)
 		wg.Wait()
 
-		if newpath == "" {
-			close(errors)
-			return
-		}
+		// if newpath == "" {
+		// 	close(errors)
+		// 	return
+		// }
 
 		if filepath.Ext(newpath) == ".zst" {
 			newname := filepath.Base(newpath)
@@ -105,8 +108,9 @@ func DoDecryption(path string, numCpu int, chunks int, maxfiles int) {
 
 			err = compressor.DecompressDirectory(newpath, decompressedPath, progress)
 			if err != nil {
-				errors <- &ghojierrors.CompressionError{Path: newpath, Error: err}
+				errors <- &ghojierrors.DecompressionError{Path: newpath, Error: err}
 				close(errors)
+				return
 			}
 
 			wg.Wait()

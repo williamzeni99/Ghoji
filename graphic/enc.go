@@ -52,7 +52,7 @@ func DoEncryption(path string, numCpu int, chunks int, maxfiles int, compress bo
 
 			err = compressor.CompressDirectory(path, newpath, compressor.DefaultCompresissionLevel, progress)
 			if err != nil {
-				errors <- &ghojierrors.CompressionError{Path: path, Error: err}
+				errors <- &ghojierrors.CompressionError{Path: newpath, Error: err}
 				close(errors)
 			}
 

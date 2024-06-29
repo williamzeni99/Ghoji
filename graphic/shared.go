@@ -1,6 +1,7 @@
 package graphic
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,14 +43,15 @@ func crawlFiles(path string) ([]string, error) {
 	return files, nil
 }
 
-func readPassword() (string, error) {
+func readPassword() ([32]byte, error) {
 	fmt.Print("Enter password: ")
 	bytePassword, err := term.ReadPassword(int(syscall.Stdin))
 	if err != nil {
-		return "", err
+		return [32]byte{}, err
 	}
 	fmt.Printf("\n\n")
-	password := string(bytePassword)
+	password := sha256.Sum256(bytePassword)
+
 	return password, nil
 
 }

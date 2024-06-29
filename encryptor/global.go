@@ -8,7 +8,7 @@ const gcmTagSize = 16
 const chunkSize = 1024 * 1024 * 1
 const enc_chunkSize = chunkSize + nonceSize + gcmTagSize
 
-const DefaultGoRoutines = 100
-const DefaultMaxFiles = 10
+var DefaultGoRoutines = 100
+var DefaultMaxFiles = 10
 
 var MaxCPUs = runtime.NumCPU()
